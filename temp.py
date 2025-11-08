@@ -77,4 +77,9 @@ elif menu == "Country-wise Temperature Trend":
                   title=f"Average Temperature Over Time - {country}")
     st.plotly_chart(fig, use_container_width=True)
 
-elif menu == "Histogram of Global Temperatures
+elif menu == "Histogram of Global Temperatures":
+    st.subheader("🌡️ Histogram of Global Temperatures")
+    fig = px.histogram(df, x="AverageTemperature", nbins=50,
+                       title="Distribution of Global Temperatures")
+    st.plotly_chart(fig, use_container_width=True)
+
