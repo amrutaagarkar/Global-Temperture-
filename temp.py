@@ -1,75 +1,62 @@
-# 🌍 Global Temperature Dashboard (Streamlit + Google Drive CSV)
-# --------------------------------------------------------------
-
+import streamlit as st
 import pandas as pd
 import plotly.express as px
-import streamlit as st
 
-# -----------------------------
-# PAGE CONFIGURATION
-# -----------------------------
-st.set_page_config(page_title="Global Temperature Dashboard 🌍", layout="wide")
+# ----------------------------------------
+# 🔗 STEP 1: LOAD DATA FROM GOOGLE DRIVE
+# ----------------------------------------
+# Replace this link with YOUR Drive file link
+drive_link = "https://drive.google.com/file/d/1RT8dMSKj2123wY_BjELt_3LabFQL0GA4/view?usp=drive_link"
 
-st.title("🌡️ GlobalTemperature Climate Change Analysis Dashboard")
-st.markdown("Analyze global temperature trends, country patterns, and anomalies.")
+# Convert "view" link to "uc?id=" direct download link
+file_id = drive_link.split("/d/")[1].split("/")[0]
+download_url = f"https://drive.google.com/uc?id={file_id}"
 
-# -----------------------------
-# LOAD DATA FROM GOOGLE DRIVE (SAFE)
-# -----------------------------
-@st.cache_data
-def load_data():
-    # 🔗 Google Drive direct download link (converted)
-    drive_url = "https://drive.google.com/uc?id=1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"
+# Try loading the CSV
+try:
+    df = pd.read_csv(download_url)
+except Exception as e:
+    st.error(f"❌ Error loading CSV: {e}")
+    st.stop()
 
-    try:
-        # Try reading normally first
-        df = pd.read_csv(drive_url)
-    except Exception:
-        # If normal read fails, try with common fallback parameters
-        df = pd.read_csv(drive_url, encoding='utf-8', engine='python', on_bad_lines='skip', sep=None)
+# ----------------------------------------
+# 🧾 STEP 2: PREVIEW DATA
+# ----------------------------------------
+st.title("🌍 Global Temperature Dashboard (Google Drive Linked)")
 
-    st.success("✅ CSV file loaded successfully from Google Drive!")
-    st.write("📄 Columns detected:", df.columns.tolist())
-    st.dataframe(df.head())
+st.sidebar.header("⚙️ Dashboard Controls")
+st.sidebar.success("Connected to Google Drive CSV ✅")
 
-    # Try to find a date column automatically
-    possible_date_cols = ['dt', 'Date', 'date', 'timestamp', 'year']
-    date_col = None
-    for col in possible_date_cols:
-        if col in df.columns:
-            date_col = col
-            break
+# Show columns for debugging
+st.subheader("🔍 Dataset Preview")
+st.write("**Columns found:**", list(df.columns))
+st.dataframe(df.head())
 
-    if date_col:
-        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-        df['Year'] = df[date_col].dt.year
-    else:
-        st.warning("⚠️ No date column found — using row index as Year.")
-        df['Year'] = range(1, len(df) + 1)
+# ----------------------------------------
+# 🧩 STEP 3: HANDLE MISSING OR UNKNOWN COLUMNS
+# ----------------------------------------
+expected_columns = ['dt', 'AverageTemperature', 'Country']
 
-    # Ensure required columns exist
-    if 'AverageTemperature' not in df.columns:
-        st.error("❌ Column 'AverageTemperature' not found in dataset!")
-        st.stop()
-    if 'Country' not in df.columns:
-        st.error("❌ Column 'Country' not found in dataset!")
-        st.stop()
+# If missing, show warning
+missing_cols = [col for col in expected_columns if col not in df.columns]
+if missing_cols:
+    st.warning(f"⚠️ Missing expected columns: {missing_cols}")
+    st.info("➡️ Please rename them or tell me the actual column names so I can fix the code.")
+    st.stop()
 
-    # Drop missing data safely
-    df = df.dropna(subset=['AverageTemperature', 'Country'])
-    return df
+# ----------------------------------------
+# 🧮 STEP 4: CLEAN & PROCESS DATA
+# ----------------------------------------
+df['dt'] = pd.to_datetime(df['dt'], errors='coerce')
+df['Year'] = df['dt'].dt.year
+df = df.dropna(subset=['AverageTemperature', 'Country'])
 
-
-# Load data
-df = load_data()
-
-# -----------------------------
-# SIDEBAR MENU
-# -----------------------------
+# ----------------------------------------
+# 📊 STEP 5: SIDEBAR MENU
+# ----------------------------------------
 menu = st.sidebar.selectbox(
-    "📊 Choose a Visualization:",
+    "Select Visualization:",
     [
-        "Select...",
         "Global Temperature Trend",
         "Top 10 Hottest Countries",
         "Top 10 Coldest Countries",
@@ -78,47 +65,97 @@ menu = st.sidebar.selectbox(
     ]
 )
 
-# -----------------------------
-# VISUALIZATIONS
-# -----------------------------
+# ----------------------------------------
+# 🌡️ STEP 6: VISUALIZATIONS
+# ----------------------------------------
+
+# 1️⃣ GLOBAL TEMPERATURE TREND
 if menu == "Global Temperature Trend":
-    st.subheader("🌡️ Global Average Temperature Over Time")
-    global_trend = df.groupby("Year")["AverageTemperature"].mean().reset_index()
-    fig = px.line(global_trend, x="Year", y="AverageTemperature",
-                  title="Global Temperature Trend Over the Years",
-                  labels={"AverageTemperature": "Average Temperature (°C)"},
-                  color_discrete_sequence=["red"])
+    global_temp = df.groupby("Year")['AverageTemperature'].mean().reset_index()
+    fig = px.line(
+        global_temp,
+        x='Year',
+        y='AverageTemperature',
+        title='🌡️ Global Average Temperature Trend (Yearly)',
+        color_discrete_sequence=["firebrick"]
+    )
+    fig.update_layout(yaxis_title="Average Temperature (°C)")
     st.plotly_chart(fig, use_container_width=True)
 
+# 2️⃣ TOP 10 HOTTEST COUNTRIES
 elif menu == "Top 10 Hottest Countries":
-    st.subheader("🔥 Top 10 Hottest Countries (Average Temperature)")
-    top_countries = df.groupby("Country")["AverageTemperature"].mean().nlargest(10).reset_index()
-    fig = px.bar(top_countries, x="Country", y="AverageTemperature",
-                 color="AverageTemperature", title="Top 10 Hottest Countries")
+    hot = (
+        df.groupby("Country")['AverageTemperature']
+        .mean()
+        .nlargest(10)
+        .reset_index()
+    )
+    fig = px.bar(
+        hot,
+        x='AverageTemperature',
+        y='Country',
+        orientation='h',
+        title='🔥 Top 10 Hottest Countries (Average Temperature)',
+        color='AverageTemperature',
+        color_continuous_scale='Reds'
+    )
+    fig.update_layout(xaxis_title="Average Temperature (°C)")
     st.plotly_chart(fig, use_container_width=True)
 
+# 3️⃣ TOP 10 COLDEST COUNTRIES
 elif menu == "Top 10 Coldest Countries":
-    st.subheader("❄️ Top 10 Coldest Countries (Average Temperature)")
-    cold_countries = df.groupby("Country")["AverageTemperature"].mean().nsmallest(10).reset_index()
-    fig = px.bar(cold_countries, x="Country", y="AverageTemperature",
-                 color="AverageTemperature", title="Top 10 Coldest Countries")
+    cold = (
+        df.groupby("Country")['AverageTemperature']
+        .mean()
+        .nsmallest(10)
+        .reset_index()
+    )
+    fig = px.bar(
+        cold,
+        x='AverageTemperature',
+        y='Country',
+        orientation='h',
+        title='❄️ Top 10 Coldest Countries (Average Temperature)',
+        color='AverageTemperature',
+        color_continuous_scale='Blues'
+    )
+    fig.update_layout(xaxis_title="Average Temperature (°C)")
     st.plotly_chart(fig, use_container_width=True)
 
+# 4️⃣ COUNTRY-WISE TEMPERATURE TREND
 elif menu == "Country-wise Temperature Trend":
-    st.subheader("📈 Country-wise Temperature Trend")
-    country = st.selectbox("Select a Country:", sorted(df["Country"].unique()))
-    country_data = df[df["Country"] == country].groupby("Year")["AverageTemperature"].mean().reset_index()
-    fig = px.line(country_data, x="Year", y="AverageTemperature",
-                  title=f"Temperature Trend for {country}",
-                  color_discrete_sequence=["blue"])
-    st.plotly_chart(fig, use_container_width=True)
+    countries = sorted(df['Country'].unique())
+    selected_country = st.selectbox("🌎 Select Country:", countries)
 
+    if selected_country:
+        trend = (
+            df[df['Country'] == selected_country]
+            .groupby("Year")['AverageTemperature']
+            .mean()
+            .reset_index()
+        )
+
+        fig = px.line(
+            trend,
+            x='Year',
+            y='AverageTemperature',
+            title=f"🌍 Temperature Trend of {selected_country}",
+            color_discrete_sequence=["green"]
+        )
+        fig.update_layout(yaxis_title="Average Temperature (°C)")
+        st.plotly_chart(fig, use_container_width=True)
+
+# 5️⃣ HISTOGRAM
 elif menu == "Histogram of Global Temperatures":
-    st.subheader("🌍 Distribution of Global Average Temperatures")
-    fig = px.histogram(df, x="AverageTemperature", nbins=40,
-                       title="Histogram of Global Temperatures",
-                       color_discrete_sequence=["green"])
+    fig = px.histogram(
+        df,
+        x='AverageTemperature',
+        nbins=40,
+        title='📊 Distribution of Global Average Temperatures',
+        color_discrete_sequence=["royalblue"]
+    )
+    fig.update_layout(
+        xaxis_title="Average Temperature (°C)",
+        yaxis_title="Frequency"
+    )
     st.plotly_chart(fig, use_container_width=True)
-
-else:
-    st.info("👈 Use the sidebar to select a visualization.")
