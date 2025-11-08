@@ -10,7 +10,7 @@ import streamlit as st
 # -----------------------------
 st.set_page_config(page_title="Global Temperature Dashboard 🌍", layout="wide")
 
-st.title("🌡️ Global Climate Change Interactive Dashboard")
+st.title("🌡️ GlobalTemperature Climate Change Analysis Dashboard")
 st.markdown("Analyze global temperature trends, country patterns, and anomalies.")
 
 # -----------------------------
