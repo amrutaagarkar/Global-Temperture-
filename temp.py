@@ -14,19 +14,25 @@ st.title("🌡️ Global Climate Change Interactive Dashboard")
 st.markdown("Analyze global temperature trends, country patterns, and anomalies.")
 
 # -----------------------------
-# LOAD DATA FROM GOOGLE DRIVE
+# LOAD DATA FROM GOOGLE DRIVE (SAFE)
 # -----------------------------
 @st.cache_data
 def load_data():
-    # 🔗 Google Drive direct link (converted)
+    # 🔗 Google Drive direct download link (converted)
     drive_url = "https://drive.google.com/uc?id=1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"
 
-    df = pd.read_csv(drive_url)
+    try:
+        # Try reading normally first
+        df = pd.read_csv(drive_url)
+    except Exception:
+        # If normal read fails, try with common fallback parameters
+        df = pd.read_csv(drive_url, encoding='utf-8', engine='python', on_bad_lines='skip', sep=None)
 
-    # Show column names for debugging
-    st.write("🧾 CSV Columns Detected:", df.columns.tolist())
+    st.success("✅ CSV file loaded successfully from Google Drive!")
+    st.write("📄 Columns detected:", df.columns.tolist())
+    st.dataframe(df.head())
 
-    # Try to detect the date column automatically
+    # Try to find a date column automatically
     possible_date_cols = ['dt', 'Date', 'date', 'timestamp', 'year']
     date_col = None
     for col in possible_date_cols:
@@ -41,12 +47,15 @@ def load_data():
         st.warning("⚠️ No date column found — using row index as Year.")
         df['Year'] = range(1, len(df) + 1)
 
-    # Clean missing data safely
-    for col in ['AverageTemperature', 'Country']:
-        if col not in df.columns:
-            st.error(f"❌ Missing expected column: {col}")
-            st.stop()
+    # Ensure required columns exist
+    if 'AverageTemperature' not in df.columns:
+        st.error("❌ Column 'AverageTemperature' not found in dataset!")
+        st.stop()
+    if 'Country' not in df.columns:
+        st.error("❌ Column 'Country' not found in dataset!")
+        st.stop()
 
+    # Drop missing data safely
     df = df.dropna(subset=['AverageTemperature', 'Country'])
     return df
 
@@ -72,7 +81,6 @@ menu = st.sidebar.selectbox(
 # -----------------------------
 # VISUALIZATIONS
 # -----------------------------
-
 if menu == "Global Temperature Trend":
     st.subheader("🌡️ Global Average Temperature Over Time")
     global_trend = df.groupby("Year")["AverageTemperature"].mean().reset_index()
