@@ -20,13 +20,34 @@ drive_url = "https://drive.google.com/uc?id=1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv(drive_url)
+    try:
+        df = pd.read_csv(
+            drive_url,
+            encoding='utf-8',
+            on_bad_lines='skip',    # skip problematic rows
+            low_memory=False,       # handle large files efficiently
+        )
+    except pd.errors.ParserError:
+        # Fallback: some CSVs use semicolon separator (;)
+        df = pd.read_csv(
+            drive_url,
+            sep=';',
+            encoding='utf-8',
+            on_bad_lines='skip',
+            low_memory=False,
+        )
+
+    # Data cleaning
     df['dt'] = pd.to_datetime(df['dt'], errors='coerce')
     df['Year'] = df['dt'].dt.year
     df = df.dropna(subset=['AverageTemperature', 'Country'])
     return df
 
-df = load_data()
+# Show loading spinner while fetching data
+with st.spinner("📥 Loading data from Google Drive... Please wait..."):
+    df = load_data()
+
+st.success("✅ Data loaded successfully!")
 
 # -----------------------------
 # SIDEBAR MENU
@@ -83,3 +104,5 @@ elif menu == "Histogram of Global Temperatures":
                        title="Distribution of Global Temperatures")
     st.plotly_chart(fig, use_container_width=True)
 
+else:
+    st.info("👈 Select a visualization from the sidebar to begin!")
