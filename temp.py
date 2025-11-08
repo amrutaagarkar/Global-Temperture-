@@ -8,16 +8,17 @@ import plotly.express as px
 # APP TITLE
 # -----------------------------
 st.set_page_config(page_title="🌍 Global Temperature Dashboard", layout="wide")
-st.title("🌡️ Global Temperature Dashboard ")
+st.title("🌡️ Global Temperature Dashboard (Google Drive Linked)")
 
 # -----------------------------
 # DOWNLOAD CSV FROM GOOGLE DRIVE
 # -----------------------------
-  # from your link
-download_url = f"https://drive.google.com/uc?export=download&id={"1RT8dMSKj2123wY_BjELt_3LabFQL0GA4}"
+file_id = "1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"  # from your link
+download_url = "https://drive.google.com/uc?export=download&id=" + file_id
 
 @st.cache_data
 def load_data(url):
+    """Download and load CSV file from Google Drive"""
     try:
         st.info("📥 Downloading data from Google Drive...")
         response = requests.get(url)
@@ -30,6 +31,9 @@ def load_data(url):
         st.error(f"❌ Error loading CSV: {e}")
         return None
 
+# -----------------------------
+# LOAD DATA
+# -----------------------------
 df = load_data(download_url)
 
 # -----------------------------
