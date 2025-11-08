@@ -8,70 +8,102 @@ import requests
 st.title("🌍 Global Temperature Dashboard (Google Drive Linked)")
 
 # ------------------------------------------------------
-# 🔗 STEP 1: Load data from Google Drive ZIP or CSV
+# 🔗 STEP 1: Load from Google Drive
 # ------------------------------------------------------
 drive_link = "https://drive.google.com/file/d/1RT8dMSKj2123wY_BjELt_3LabFQL0GA4/view?usp=drive_link"
 
-# Convert to direct-download link
 try:
     file_id = drive_link.split("/d/")[1].split("/")[0]
-    download_url = f"https://drive.google.com/uc?id={file_id}"
+    download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
 except Exception:
-    st.error("❌ Invalid Google Drive link. Please provide a valid 'file/d/...' link.")
+    st.error("❌ Invalid Google Drive link format.")
     st.stop()
+
 
 @st.cache_data
 def load_data(url):
     r = requests.get(url)
     if r.status_code != 200:
-        st.error("❌ Could not fetch the file from Google Drive.")
+        st.error("❌ Could not download file from Google Drive.")
         st.stop()
 
     content = io.BytesIO(r.content)
 
-    # Try reading as ZIP first
+    # Try ZIP first
     try:
         with zipfile.ZipFile(content, "r") as z:
-            csv_name = [f for f in z.namelist() if f.endswith(".csv")][0]
+            csv_name = [f for f in z.namelist() if f.lower().endswith((".csv", ".xls", ".xlsx"))][0]
             with z.open(csv_name) as f:
-                df = pd.read_csv(f, low_memory=False, on_bad_lines='skip')
-                return df
-    except zipfile.BadZipFile:
-        # Not a zip file — try normal CSV
-        try:
-            df = pd.read_csv(content, sep=None, engine='python', on_bad_lines='skip')
+                if csv_name.endswith(".csv"):
+                    try:
+                        df = pd.read_csv(f, sep=",", on_bad_lines="skip", low_memory=False)
+                    except Exception:
+                        f.seek(0)
+                        df = pd.read_csv(f, sep=";", on_bad_lines="skip", low_memory=False)
+                else:
+                    df = pd.read_excel(f)
             return df
-        except Exception as e:
-            st.error(f"❌ Failed to read CSV: {e}")
-            st.stop()
+    except zipfile.BadZipFile:
+        # Not a ZIP — handle normal CSV/Excel
+        try:
+            df = pd.read_csv(content, sep=",", on_bad_lines="skip", low_memory=False)
+        except Exception:
+            try:
+                df = pd.read_csv(content, sep=";", on_bad_lines="skip", low_memory=False)
+            except Exception:
+                content.seek(0)
+                df = pd.read_excel(content)
+        return df
+
 
 df = load_data(download_url)
 
 # ------------------------------------------------------
-# 🧹 STEP 2: Clean and prepare data
+# 🧹 STEP 2: Inspect columns
 # ------------------------------------------------------
-if 'dt' not in df.columns:
-    st.warning("⚠️ 'dt' column (date) not found — please check your dataset headers!")
-    st.write("Columns detected:", list(df.columns))
-    st.stop()
-
-# Convert date and clean up
-df['dt'] = pd.to_datetime(df['dt'], errors='coerce')
-df['Year'] = df['dt'].dt.year
-
-if 'AverageTemperature' not in df.columns:
-    possible_cols = [c for c in df.columns if 'temp' in c.lower()]
-    st.warning(f"⚠️ 'AverageTemperature' column missing. Possible matches: {possible_cols}")
-    st.stop()
-
-if 'Country' not in df.columns:
-    st.warning("⚠️ 'Country' column missing. Please check dataset structure.")
-    st.stop()
-
-df = df.dropna(subset=['AverageTemperature', 'Country'])
+st.write("✅ **File loaded successfully!** Columns detected:")
+st.write(df.columns.tolist())
 
 # ------------------------------------------------------
-# 📊 STEP 3: Sidebar menu
+# 🧹 STEP 3: Prepare data
+# ------------------------------------------------------
+date_col = None
+for c in df.columns:
+    if "dt" in c.lower() or "date" in c.lower():
+        date_col = c
+        break
+
+if not date_col:
+    st.warning("⚠️ No date column found. Using index as Year.")
+    df["Year"] = range(1, len(df) + 1)
+else:
+    df["dt"] = pd.to_datetime(df[date_col], errors="coerce")
+    df["Year"] = df["dt"].dt.year
+
+temp_col = None
+for c in df.columns:
+    if "temp" in c.lower():
+        temp_col = c
+        break
+
+country_col = None
+for c in df.columns:
+    if "country" in c.lower():
+        country_col = c
+        break
+
+if not temp_col:
+    st.error("❌ Could not find a temperature column (like 'AverageTemperature').")
+    st.stop()
+
+if not country_col:
+    st.error("❌ Could not find a 'Country' column.")
+    st.stop()
+
+df = df.dropna(subset=[temp_col, country_col])
+
+# ------------------------------------------------------
+# 📊 STEP 4: Sidebar menu
 # ------------------------------------------------------
 menu = st.sidebar.selectbox(
     "Select Visualization:",
@@ -85,45 +117,39 @@ menu = st.sidebar.selectbox(
 )
 
 # ------------------------------------------------------
-# 📈 STEP 4: Visualizations
+# 📈 STEP 5: Visualizations
 # ------------------------------------------------------
-
-# 1️⃣ Global Trend
 if menu == "Global Temperature Trend":
-    global_temp = df.groupby("Year")['AverageTemperature'].mean().reset_index()
-    fig = px.line(global_temp, x='Year', y='AverageTemperature',
-                  title='🌡️ Global Average Temperature Trend (Yearly)',
+    global_temp = df.groupby("Year")[temp_col].mean().reset_index()
+    fig = px.line(global_temp, x="Year", y=temp_col,
+                  title="🌡️ Global Average Temperature Trend (Yearly)",
                   color_discrete_sequence=["firebrick"])
     st.plotly_chart(fig, use_container_width=True)
 
-# 2️⃣ Top 10 Hottest
 elif menu == "Top 10 Hottest Countries":
-    hot = df.groupby("Country")['AverageTemperature'].mean().nlargest(10).reset_index()
-    fig = px.bar(hot, x='AverageTemperature', y='Country', orientation='h',
-                 title='🔥 Top 10 Hottest Countries', color='AverageTemperature',
-                 color_continuous_scale='Reds')
+    hot = df.groupby(country_col)[temp_col].mean().nlargest(10).reset_index()
+    fig = px.bar(hot, x=temp_col, y=country_col, orientation="h",
+                 title="🔥 Top 10 Hottest Countries", color=temp_col,
+                 color_continuous_scale="Reds")
     st.plotly_chart(fig, use_container_width=True)
 
-# 3️⃣ Top 10 Coldest
 elif menu == "Top 10 Coldest Countries":
-    cold = df.groupby("Country")['AverageTemperature'].mean().nsmallest(10).reset_index()
-    fig = px.bar(cold, x='AverageTemperature', y='Country', orientation='h',
-                 title='❄️ Top 10 Coldest Countries', color='AverageTemperature',
-                 color_continuous_scale='Blues')
+    cold = df.groupby(country_col)[temp_col].mean().nsmallest(10).reset_index()
+    fig = px.bar(cold, x=temp_col, y=country_col, orientation="h",
+                 title="❄️ Top 10 Coldest Countries", color=temp_col,
+                 color_continuous_scale="Blues")
     st.plotly_chart(fig, use_container_width=True)
 
-# 4️⃣ Country Trend
 elif menu == "Country-wise Temperature Trend":
-    country = st.selectbox("🌎 Select Country", sorted(df['Country'].unique()))
-    sub = df[df['Country'] == country].groupby("Year")['AverageTemperature'].mean().reset_index()
-    fig = px.line(sub, x='Year', y='AverageTemperature',
+    country = st.selectbox("🌎 Select Country", sorted(df[country_col].unique()))
+    sub = df[df[country_col] == country].groupby("Year")[temp_col].mean().reset_index()
+    fig = px.line(sub, x="Year", y=temp_col,
                   title=f"🌍 Temperature Trend of {country}",
                   color_discrete_sequence=["green"])
     st.plotly_chart(fig, use_container_width=True)
 
-# 5️⃣ Histogram
 elif menu == "Histogram of Global Temperatures":
-    fig = px.histogram(df, x='AverageTemperature', nbins=40,
-                       title='📊 Global Temperature Distribution',
+    fig = px.histogram(df, x=temp_col, nbins=40,
+                       title="📊 Distribution of Global Temperatures",
                        color_discrete_sequence=["royalblue"])
     st.plotly_chart(fig, use_container_width=True)
