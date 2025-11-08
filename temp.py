@@ -1,9 +1,8 @@
-# 🌍 Global Temperature Dashboard - Streamlit Version
-# ---------------------------------------------------
+# 🌍 Global Temperature Dashboard - Streamlit Version (Google Drive CSV)
+# --------------------------------------------------------------------
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import zipfile
 
 # -----------------------------
 # PAGE CONFIGURATION
@@ -14,20 +13,20 @@ st.title("🌡️ Global Climate Change Interactive Dashboard")
 st.markdown("Analyze global temperature trends, country patterns, and anomalies.")
 
 # -----------------------------
-# LOAD DATA
+# LOAD DATA FROM GOOGLE DRIVE
 # -----------------------------
-# ✅ Update this with your correct ZIP/CSV file path
-zip_path = r"C:\Users\amrut\Downloads\GlobalLandTemperaturesByCity.csv (1).zip"
+# Your Google Drive direct link
+drive_url = "https://drive.google.com/uc?id=1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"
 
-with zipfile.ZipFile(zip_path, 'r') as z:
-    csv_name = [name for name in z.namelist() if name.endswith('.csv')][0]
-    with z.open(csv_name) as f:
-        df = pd.read_csv(f)
+@st.cache_data
+def load_data():
+    df = pd.read_csv(drive_url)
+    df['dt'] = pd.to_datetime(df['dt'], errors='coerce')
+    df['Year'] = df['dt'].dt.year
+    df = df.dropna(subset=['AverageTemperature', 'Country'])
+    return df
 
-# Convert date column to datetime and extract year
-df['dt'] = pd.to_datetime(df['dt'], errors='coerce')
-df['Year'] = df['dt'].dt.year
-df = df.dropna(subset=['AverageTemperature', 'Country'])
+df = load_data()
 
 # -----------------------------
 # SIDEBAR MENU
@@ -45,4 +44,37 @@ menu = st.sidebar.selectbox(
 )
 
 # -----------------------------
-# VISUALIZ
+# VISUALIZATIONS
+# -----------------------------
+if menu == "Global Temperature Trend":
+    st.subheader("🌍 Global Average Temperature Over Time")
+    global_temp = df.groupby("Year")["AverageTemperature"].mean().reset_index()
+    fig = px.line(global_temp, x="Year", y="AverageTemperature",
+                  title="Global Average Temperature Over Time",
+                  labels={"AverageTemperature": "Avg Temperature (°C)"})
+    st.plotly_chart(fig, use_container_width=True)
+
+elif menu == "Top 10 Hottest Countries":
+    st.subheader("🔥 Top 10 Hottest Countries (Average Across All Years)")
+    hot_countries = df.groupby("Country")["AverageTemperature"].mean().nlargest(10).reset_index()
+    fig = px.bar(hot_countries, x="Country", y="AverageTemperature",
+                 color="AverageTemperature", title="Top 10 Hottest Countries")
+    st.plotly_chart(fig, use_container_width=True)
+
+elif menu == "Top 10 Coldest Countries":
+    st.subheader("❄️ Top 10 Coldest Countries (Average Across All Years)")
+    cold_countries = df.groupby("Country")["AverageTemperature"].mean().nsmallest(10).reset_index()
+    fig = px.bar(cold_countries, x="Country", y="AverageTemperature",
+                 color="AverageTemperature", title="Top 10 Coldest Countries")
+    st.plotly_chart(fig, use_container_width=True)
+
+elif menu == "Country-wise Temperature Trend":
+    st.subheader("📈 Country-wise Temperature Trend")
+    countries = df["Country"].unique()
+    country = st.selectbox("Select a Country:", sorted(countries))
+    country_data = df[df["Country"] == country]
+    fig = px.line(country_data, x="Year", y="AverageTemperature",
+                  title=f"Average Temperature Over Time - {country}")
+    st.plotly_chart(fig, use_container_width=True)
+
+elif menu == "Histogram of Global Temperatures
