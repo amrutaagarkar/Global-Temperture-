@@ -62,7 +62,10 @@ df = load_data(download_url)
 # ------------------------------------------------------
 st.write("✅ File loaded successfully! Columns detected:")
 st.write(df.columns.tolist())
-st.dataframe(df.head(5))
+
+# Show a preview of the data
+st.dataframe(df.head(10))
+
 
 # ------------------------------------------------------
 # 🧹 Prepare columns
