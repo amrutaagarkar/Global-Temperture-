@@ -8,7 +8,7 @@ import requests
 st.title("🌍 Global Temperature Dashboard (Google Drive Linked)")
 
 # ------------------------------------------------------
-# 🔗 STEP 1: Load from Google Drive
+# 🔗 Google Drive Link (update if needed)
 # ------------------------------------------------------
 drive_link = "https://drive.google.com/file/d/1RT8dMSKj2123wY_BjELt_3LabFQL0GA4/view?usp=drive_link"
 
@@ -29,81 +29,62 @@ def load_data(url):
 
     content = io.BytesIO(r.content)
 
-    # Try ZIP first
+    # Try reading as ZIP first
     try:
         with zipfile.ZipFile(content, "r") as z:
             csv_name = [f for f in z.namelist() if f.lower().endswith((".csv", ".xls", ".xlsx"))][0]
             with z.open(csv_name) as f:
-                if csv_name.endswith(".csv"):
-                    try:
-                        df = pd.read_csv(f, sep=",", on_bad_lines="skip", low_memory=False)
-                    except Exception:
-                        f.seek(0)
-                        df = pd.read_csv(f, sep=";", on_bad_lines="skip", low_memory=False)
-                else:
-                    df = pd.read_excel(f)
+                try:
+                    df = pd.read_csv(f, sep=",", on_bad_lines="skip", low_memory=False)
+                except Exception:
+                    f.seek(0)
+                    df = pd.read_csv(f, sep=";", encoding="latin1", on_bad_lines="skip", low_memory=False)
             return df
     except zipfile.BadZipFile:
-        # Not a ZIP — handle normal CSV/Excel
+        # Try plain CSV
         try:
             df = pd.read_csv(content, sep=",", on_bad_lines="skip", low_memory=False)
+            return df
         except Exception:
             try:
-                df = pd.read_csv(content, sep=";", on_bad_lines="skip", low_memory=False)
-            except Exception:
                 content.seek(0)
-                df = pd.read_excel(content)
-        return df
+                df = pd.read_csv(content, sep=";", encoding="latin1", on_bad_lines="skip", low_memory=False)
+                return df
+            except Exception as e:
+                st.error(f"❌ Failed to read CSV file. Error: {e}")
+                st.stop()
 
 
 df = load_data(download_url)
 
 # ------------------------------------------------------
-# 🧹 STEP 2: Inspect columns
+# 🧹 Show columns
 # ------------------------------------------------------
-st.write("✅ **File loaded successfully!** Columns detected:")
+st.write("✅ File loaded successfully! Columns detected:")
 st.write(df.columns.tolist())
+st.dataframe(df.head(5))
 
 # ------------------------------------------------------
-# 🧹 STEP 3: Prepare data
+# 🧹 Prepare columns
 # ------------------------------------------------------
-date_col = None
-for c in df.columns:
-    if "dt" in c.lower() or "date" in c.lower():
-        date_col = c
-        break
+date_col = next((c for c in df.columns if "dt" in c.lower() or "date" in c.lower()), None)
+temp_col = next((c for c in df.columns if "temp" in c.lower()), None)
+country_col = next((c for c in df.columns if "country" in c.lower()), None)
 
-if not date_col:
-    st.warning("⚠️ No date column found. Using index as Year.")
-    df["Year"] = range(1, len(df) + 1)
-else:
+if not temp_col or not country_col:
+    st.error("❌ Could not detect temperature or country columns automatically.")
+    st.stop()
+
+if date_col:
     df["dt"] = pd.to_datetime(df[date_col], errors="coerce")
     df["Year"] = df["dt"].dt.year
-
-temp_col = None
-for c in df.columns:
-    if "temp" in c.lower():
-        temp_col = c
-        break
-
-country_col = None
-for c in df.columns:
-    if "country" in c.lower():
-        country_col = c
-        break
-
-if not temp_col:
-    st.error("❌ Could not find a temperature column (like 'AverageTemperature').")
-    st.stop()
-
-if not country_col:
-    st.error("❌ Could not find a 'Country' column.")
-    st.stop()
+else:
+    df["Year"] = range(1, len(df) + 1)
 
 df = df.dropna(subset=[temp_col, country_col])
 
 # ------------------------------------------------------
-# 📊 STEP 4: Sidebar menu
+# 📊 Sidebar menu
 # ------------------------------------------------------
 menu = st.sidebar.selectbox(
     "Select Visualization:",
@@ -117,7 +98,7 @@ menu = st.sidebar.selectbox(
 )
 
 # ------------------------------------------------------
-# 📈 STEP 5: Visualizations
+# 📈 Visualizations
 # ------------------------------------------------------
 if menu == "Global Temperature Trend":
     global_temp = df.groupby("Year")[temp_col].mean().reset_index()
