@@ -1,4 +1,4 @@
-ADD OPTION 3 TO THIS CODE    import streamlit as st
+ import streamlit as st
 import pandas as pd
 import zipfile
 import io
