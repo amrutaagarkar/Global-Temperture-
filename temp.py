@@ -1,151 +1,123 @@
+import streamlit as st
 import pandas as pd
-import plotly.express as px
-import ipywidgets as widgets
-from IPython.display import display
-import requests
 import zipfile
 import io
+import plotly.express as px
 
-# -------------------------------------------------------
-# LOAD DATA FROM GOOGLE DRIVE ZIP
-# -------------------------------------------------------
+# ---------------------------------------------------
+# TITLE
+# ---------------------------------------------------
+st.set_page_config(page_title="Global Temperature Dashboard", layout="wide")
+st.title("🌡️ Global Temperature Dashboard")
+st.write("Interactive Temperature Analysis using Streamlit")
 
-file_id = "1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"
-url = f"https://drive.google.com/uc?export=download&id={file_id}"
+# ---------------------------------------------------
+# FILE UPLOAD (ZIP or CSV)
+# ---------------------------------------------------
+uploaded = st.file_uploader("📂 Upload Temperature ZIP/CSV file", type=["zip", "csv"])
 
-response = requests.get(url)
-content = response.content
+if uploaded is not None:
+    try:
+        # ---------------------------
+        # If ZIP → Extract CSV
+        # ---------------------------
+        if uploaded.name.endswith(".zip"):
+            with zipfile.ZipFile(uploaded) as z:
+                # auto-detect first CSV inside ZIP
+                csv_name = [f for f in z.namelist() if f.endswith(".csv")][0]
+                st.success(f"CSV found inside ZIP → {csv_name}")
+                df = pd.read_csv(z.open(csv_name))
 
-# Extract ZIP → CSV
-with zipfile.ZipFile(io.BytesIO(content)) as z:
-    csv_files = [f for f in z.namelist() if f.endswith(".csv")]
-    csv_name = csv_files[0]
-    with z.open(csv_name) as f:
-        df = pd.read_csv(f, low_memory=False)
+        # ---------------------------
+        # If CSV uploaded
+        # ---------------------------
+        else:
+            df = pd.read_csv(uploaded)
 
-# -------------------------------------------------------
-# AUTO DETECT IMPORTANT COLUMNS
-# -------------------------------------------------------
-date_col = [c for c in df.columns if "date" in c.lower() or "dt" in c.lower()][0]
-temp_col = [c for c in df.columns if "temp" in c.lower()][0]
-country_col = [c for c in df.columns if "country" in c.lower()][0]
+        # ---------------------------
+        # CLEANING
+        # ---------------------------
+        df["dt"] = pd.to_datetime(df["dt"], errors="coerce")
+        df["Year"] = df["dt"].dt.year
+        df = df.dropna(subset=["AverageTemperature", "Country"])
 
-df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-df["Year"] = df[date_col].dt.year
-df = df.dropna(subset=[temp_col, country_col])
+        st.success("✔ Dataset loaded successfully!")
 
-# -------------------------------------------------------
-# DROPDOWN MENU
-# -------------------------------------------------------
-dropdown = widgets.Dropdown(
-    options=[
-        "Select...",
-        "Global Temperature Trend",
-        "Top 10 Hottest Countries",
-        "Top 10 Coldest Countries",
-        "Country-wise Trend",
-        "Temperature Distribution"
-    ],
-    description="View:",
-    style={'description_width': 'initial'}
-)
+        # ---------------------------------------------------
+        # SIDEBAR OPTIONS
+        # ---------------------------------------------------
+        st.sidebar.header("📊 Select Visualization")
+        choice = st.sidebar.selectbox(
+            "Choose a graph:",
+            [
+                "Global Temperature Trend",
+                "Top 10 Hottest Countries",
+                "Top 10 Coldest Countries",
+                "Country-wise Temperature Trend",
+                "Histogram of Global Temperatures",
+            ],
+        )
 
-output = widgets.Output()
-
-# -------------------------------------------------------
-# CALLBACK FUNCTION
-# -------------------------------------------------------
-def show_graph(change):
-    output.clear_output()
-    with output:
-        choice = change['new']
-
-        # ----------------------------------------
-        # GLOBAL TREND
-        # ----------------------------------------
+        # ---------------------------------------------------
+        # 1️⃣ GLOBAL TEMPERATURE TREND
+        # ---------------------------------------------------
         if choice == "Global Temperature Trend":
-            temp = df.groupby("Year")[temp_col].mean().reset_index()
-            fig = px.line(
-                temp,
-                x="Year", y=temp_col,
-                title="🌡️ Global Average Temperature (Yearly)"
-            )
-            fig.show()
+            st.subheader("🌍 Global Average Temperature Trend")
+            global_temp = df.groupby("Year")["AverageTemperature"].mean().reset_index()
+            fig = px.line(global_temp, x="Year", y="AverageTemperature",
+                          title="Global Temperature Trend (Yearly)",
+                          markers=True)
+            st.plotly_chart(fig, use_container_width=True)
 
-        # ----------------------------------------
-        # TOP 10 HOTTEST COUNTRIES
-        # ----------------------------------------
+        # ---------------------------------------------------
+        # 2️⃣ HOTTEST COUNTRIES
+        # ---------------------------------------------------
         elif choice == "Top 10 Hottest Countries":
-            hot = df.groupby(country_col)[temp_col].mean().nlargest(10).reset_index()
-            fig = px.bar(
-                hot, 
-                x=temp_col, 
-                y=country_col, 
-                orientation='h',
-                title="🔥 Top 10 Hottest Countries",
-                color=temp_col
-            )
-            fig.show()
+            st.subheader("🔥 Top 10 Hottest Countries")
+            hot = df.groupby("Country")["AverageTemperature"].mean().nlargest(10).reset_index()
+            fig = px.bar(hot, x="AverageTemperature", y="Country",
+                         orientation="h", title="Top 10 Hottest Countries",
+                         color="AverageTemperature", color_continuous_scale="Reds")
+            st.plotly_chart(fig, use_container_width=True)
 
-        # ----------------------------------------
-        # TOP 10 COLDEST COUNTRIES
-        # ----------------------------------------
+        # ---------------------------------------------------
+        # 3️⃣ COLDEST COUNTRIES
+        # ---------------------------------------------------
         elif choice == "Top 10 Coldest Countries":
-            cold = df.groupby(country_col)[temp_col].mean().nsmallest(10).reset_index()
-            fig = px.bar(
-                cold, 
-                x=temp_col, 
-                y=country_col,
-                orientation='h',
-                title="❄️ Top 10 Coldest Countries",
-                color=temp_col
-            )
-            fig.show()
+            st.subheader("❄️ Top 10 Coldest Countries")
+            cold = df.groupby("Country")["AverageTemperature"].mean().nsmallest(10).reset_index()
+            fig = px.bar(cold, x="AverageTemperature", y="Country",
+                         orientation="h", title="Top 10 Coldest Countries",
+                         color="AverageTemperature", color_continuous_scale="Blues")
+            st.plotly_chart(fig, use_container_width=True)
 
-        # ----------------------------------------
-        # COUNTRY WISE TREND
-        # ----------------------------------------
-        elif choice == "Country-wise Trend":
-            country_selector = widgets.Dropdown(
-                options=sorted(df[country_col].unique()),
-                description="Country:"
-            )
+        # ---------------------------------------------------
+        # 4️⃣ COUNTRY-WISE TREND
+        # ---------------------------------------------------
+        elif choice == "Country-wise Temperature Trend":
+            st.subheader("🌎 Country-wise Temperature Trend")
 
-            display(country_selector)
+            country = st.sidebar.selectbox("Select Country:", sorted(df["Country"].unique()))
+            country_df = df[df["Country"] == country]
+            trend = country_df.groupby("Year")["AverageTemperature"].mean().reset_index()
 
-            def show_country(change2):
-                output.clear_output(wait=True)
-                with output:
-                    c = change2['new']
-                    temp = df[df[country_col] == c].groupby("Year")[temp_col].mean().reset_index()
+            fig = px.line(trend, x="Year", y="AverageTemperature",
+                          title=f"Temperature Trend of {country}",
+                          markers=True)
+            st.plotly_chart(fig, use_container_width=True)
 
-                    fig = px.line(
-                        temp, 
-                        x="Year", y=temp_col,
-                        title=f"🌍 Temperature Trend — {c}"
-                    )
-                    fig.show()
+        # ---------------------------------------------------
+        # 5️⃣ HISTOGRAM
+        # ---------------------------------------------------
+        elif choice == "Histogram of Global Temperatures":
+            st.subheader("📊 Histogram of Global Temperatures")
+            fig = px.histogram(df, x="AverageTemperature",
+                               title="Global Temperature Distribution",
+                               nbins=40)
+            st.plotly_chart(fig, use_container_width=True)
 
-            country_selector.observe(show_country, names='value')
+    except Exception as e:
+        st.error(f"❌ Error loading file: {e}")
 
-        # ----------------------------------------
-        # TEMPERATURE HISTOGRAM
-        # ----------------------------------------
-        elif choice == "Temperature Distribution":
-            fig = px.histogram(
-                df, 
-                x=temp_col,
-                nbins=40,
-                title="📊 Temperature Distribution"
-            )
-            fig.show()
-
-# -------------------------------------------------------
-# BIND DROPDOWN
-# -------------------------------------------------------
-dropdown.observe(show_graph, names='value')
-
-# -------------------------------------------------------
-# DISPLAY WIDGETS
-# -------------------------------------------------------
-display(dropdown, output)
+else:
+    st.info("📥 Upload a ZIP/CSV file to begin.")  HOW TO LOAD DATA IN THIS 
