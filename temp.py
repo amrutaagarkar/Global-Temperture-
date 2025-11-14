@@ -5,40 +5,42 @@ import io
 import plotly.express as px
 
 # ---------------------------------------------------
-# PAGE SETTINGS
+# TITLE
 # ---------------------------------------------------
 st.set_page_config(page_title="Global Temperature Dashboard", layout="wide")
-st.title("🌡️ Global Temperature Dashboard")
-st.write("Upload ZIP or CSV to view temperature analysis.")
+st.title("🌡️ Global Temperature And Climate Change Analysis Dashboard")
 
 # ---------------------------------------------------
-# FILE UPLOADER (ZIP or CSV)
+# FILE UPLOAD (ZIP or CSV)
 # ---------------------------------------------------
-uploaded = st.file_uploader("https://drive.google.com/file/d/1RT8dMSKj2123wY_BjELt_3LabFQL0GA4/view?usp=drive_link", 
-                            type=["zip", "csv"])
+uploaded = st.file_uploader("📂 Upload Temperature ZIP/CSV file", type=["zip", "csv"])
 
-df = None  # container for dataset
+if uploaded is not None:
+    try:
+        # ---------------------------
+        # If ZIP → Extract CSV
+        # ---------------------------
+        if uploaded.name.endswith(".zip"):
+            with zipfile.ZipFile(uploaded) as z:
+                # auto-detect first CSV inside ZIP
+                csv_name = [f for f in z.namelist() if f.endswith(".csv")][0]
+                st.success(f"CSV found inside ZIP → {csv_name}")
+                df = pd.read_csv(z.open(csv_name))
 
-
-
-        # ---------------------------------------------------
-        # CASE 2: DIRECT CSV FILE
-        # ---------------------------------------------------
+        # ---------------------------
+        # If CSV uploaded
+        # ---------------------------
         else:
-            st.info("📄 Reading CSV file...")
             df = pd.read_csv(uploaded)
 
-        # ---------------------------------------------------
-        # CLEAN DATA
-        # ---------------------------------------------------
+        # ---------------------------
+        # CLEANING
+        # ---------------------------
         df["dt"] = pd.to_datetime(df["dt"], errors="coerce")
         df["Year"] = df["dt"].dt.year
         df = df.dropna(subset=["AverageTemperature", "Country"])
 
-        st.success("✅ File loaded successfully!")
-
-        st.write("### Preview of Data")
-        st.dataframe(df.head())
+        st.success("✔ Dataset loaded successfully!")
 
         # ---------------------------------------------------
         # SIDEBAR OPTIONS
@@ -56,14 +58,14 @@ df = None  # container for dataset
         )
 
         # ---------------------------------------------------
-        # 1️⃣ GLOBAL TREND
+        # 1️⃣ GLOBAL TEMPERATURE TREND
         # ---------------------------------------------------
         if choice == "Global Temperature Trend":
             st.subheader("🌍 Global Average Temperature Trend")
             global_temp = df.groupby("Year")["AverageTemperature"].mean().reset_index()
-
             fig = px.line(global_temp, x="Year", y="AverageTemperature",
-                          title="Global Temperature Trend (Yearly)", markers=True)
+                          title="Global Temperature Trend (Yearly)",
+                          markers=True)
             st.plotly_chart(fig, use_container_width=True)
 
         # ---------------------------------------------------
@@ -72,16 +74,9 @@ df = None  # container for dataset
         elif choice == "Top 10 Hottest Countries":
             st.subheader("🔥 Top 10 Hottest Countries")
             hot = df.groupby("Country")["AverageTemperature"].mean().nlargest(10).reset_index()
-
-            fig = px.bar(
-                hot,
-                x="AverageTemperature",
-                y="Country",
-                orientation="h",
-                title="Top 10 Hottest Countries",
-                color="AverageTemperature",
-                color_continuous_scale="Reds",
-            )
+            fig = px.bar(hot, x="AverageTemperature", y="Country",
+                         orientation="h", title="Top 10 Hottest Countries",
+                         color="AverageTemperature", color_continuous_scale="Reds")
             st.plotly_chart(fig, use_container_width=True)
 
         # ---------------------------------------------------
@@ -90,16 +85,9 @@ df = None  # container for dataset
         elif choice == "Top 10 Coldest Countries":
             st.subheader("❄️ Top 10 Coldest Countries")
             cold = df.groupby("Country")["AverageTemperature"].mean().nsmallest(10).reset_index()
-
-            fig = px.bar(
-                cold,
-                x="AverageTemperature",
-                y="Country",
-                orientation="h",
-                title="Top 10 Coldest Countries",
-                color="AverageTemperature",
-                color_continuous_scale="Blues",
-            )
+            fig = px.bar(cold, x="AverageTemperature", y="Country",
+                         orientation="h", title="Top 10 Coldest Countries",
+                         color="AverageTemperature", color_continuous_scale="Blues")
             st.plotly_chart(fig, use_container_width=True)
 
         # ---------------------------------------------------
@@ -113,20 +101,22 @@ df = None  # container for dataset
             trend = country_df.groupby("Year")["AverageTemperature"].mean().reset_index()
 
             fig = px.line(trend, x="Year", y="AverageTemperature",
-                          title=f"Temperature Trend of {country}", markers=True)
+                          title=f"Temperature Trend of {country}",
+                          markers=True)
             st.plotly_chart(fig, use_container_width=True)
 
         # ---------------------------------------------------
         # 5️⃣ HISTOGRAM
         # ---------------------------------------------------
         elif choice == "Histogram of Global Temperatures":
-            st.subheader("📊 Global Temperature Distribution")
+            st.subheader("📊 Histogram of Global Temperatures")
             fig = px.histogram(df, x="AverageTemperature",
-                               title="Histogram of Global Temperatures", nbins=40)
+                               title="Global Temperature Distribution",
+                               nbins=40)
             st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        st.error(f"❌ Error processing file: {e}")
+        st.error(f"❌ Error loading file: {e}")
 
 else:
-    st.warning("📥 Please upload a ZIP or CSV file to continue.")
+    st.info("📥 Upload a ZIP/CSV file to begin.")
