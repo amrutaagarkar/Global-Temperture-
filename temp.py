@@ -1,111 +1,124 @@
-# ---------------------------------------------------------
-# 🌍 Global Temperature Dashboard (Streamlit Version)
-# Loads CSV automatically from Google Drive ZIP
-# ---------------------------------------------------------
-
 import streamlit as st
 import pandas as pd
-import requests
 import zipfile
 import io
+import requests
 import plotly.express as px
 
+# ---------------------------------------------------
+# TITLE
+# ---------------------------------------------------
 st.set_page_config(page_title="Global Temperature Dashboard", layout="wide")
+st.title("🌡️ Global Temperature Dashboard")
+st.write("Interactive Temperature Analysis using Streamlit")
 
-# ----------------------------
-# 1) Convert Google Drive link
-# ----------------------------
-def get_drive_download_url(url):
-    # Extract file ID
-    file_id = url.split("/d/")[1].split("/")[0]
-    return f"https://drive.google.com/uc?export=download&id={file_id}"
+st.header("📥 Load Dataset From Google Drive")
 
-# ----------------------------
-# 2) Download + Extract CSV
-# ----------------------------
-@st.cache_data
-def load_csv_from_drive_zip(drive_link):
-    st.info("📥 Downloading file from Google Drive...")
+# ---------------------------------------------------
+# GOOGLE DRIVE LINK INPUT
+# ---------------------------------------------------
+gdrive_url = st.text_input("https://drive.google.com/file/d/1rIv7ciWzHOmGjl6QPwIeDhChTwCuTS_n/view?usp=drive_link")
 
-    download_url = get_drive_download_url(drive_link)
-    r = requests.get(download_url)
+df = None
 
-    if r.status_code != 200:
-        st.error("❌ Failed to download file. Check your Google Drive link.")
-        return None
+if st.button("Load Data"):
+    try:
+        # Extract file ID
+        if "id=" in gdrive_url:
+            file_id = gdrive_url.split("id=")[1]
+        else:
+            file_id = gdrive_url.split("/d/")[1].split("/")[0]
 
-    st.success("📦 File downloaded! Extracting ZIP...")
+        # Direct download URL
+        download_url = f"https://drive.google.com/uc?id={file_id}&export=download"
 
-    z = zipfile.ZipFile(io.BytesIO(r.content))
+        st.info("📥 Downloading file from Google Drive...")
 
-    # Find CSV in ZIP
-    csv_name = None
-    for f in z.namelist():
-        if f.endswith(".csv"):
-            csv_name = f
-            break
+        response = requests.get(download_url)
+        file_bytes = io.BytesIO(response.content)
 
-    if not csv_name:
-        st.error("❌ No CSV found inside ZIP file!")
-        return None
+        # Check if ZIP or CSV:
+        if gdrive_url.endswith(".zip"):
+            with zipfile.ZipFile(file_bytes) as z:
+                csv_name = [f for f in z.namelist() if f.endswith(".csv")][0]
+                st.success(f"CSV found inside ZIP → {csv_name}")
+                df = pd.read_csv(z.open(csv_name))
+        else:
+            df = pd.read_csv(file_bytes)
 
-    df = pd.read_csv(z.open(csv_name))
+        st.success("✅ File loaded successfully!")
 
-    # required columns
-    expected = ['dt', 'AverageTemperature', 'AverageTemperatureUncertainty', 'Country']
-    df = df[expected]
-
-    df["dt"] = pd.to_datetime(df["dt"])
-
-    return df
+    except Exception as e:
+        st.error(f"❌ Error loading file: {e}")
 
 
-# ----------------------------
-# 3) Load user-provided Drive link
-# ----------------------------
-st.title("🌡️ Global Temperature Dashboard (Streamlit)")
-st.write("Loads data directly from your Google Drive ZIP file")
+# ---------------------------------------------------
+# PROCESS + DASHBOARD (RUN ONLY IF DATA LOADED)
+# ---------------------------------------------------
+if df is not None:
+    try:
+        # Clean dataset
+        df["dt"] = pd.to_datetime(df["dt"], errors="coerce")
+        df["Year"] = df["dt"].dt.year
+        df = df.dropna(subset=["AverageTemperature", "Country"])
 
-drive_link = st.text_input(
-    "Paste your Google Drive ZIP file link:",
-    "https://drive.google.com/file/d/1rIv7ciWzHOmGjl6QPwIeDhChTwCuTS_n/view?usp=drive_link"
-)
+        st.success("✔ Dataset cleaned and ready!")
 
-if drive_link:
-    df = load_csv_from_drive_zip(drive_link)
-
-    if df is not None:
-        st.success("✅ Data loaded successfully!")
-
-        # ----------------------------
-        # Sidebar filters
-        # ----------------------------
-        st.sidebar.header("Filters")
-
-        countries = sorted(df["Country"].dropna().unique())
-        selected_country = st.sidebar.selectbox("Select Country", countries, index=countries.index("India"))
-
-        # ----------------------------
-        # Filtered data
-        # ----------------------------
-        dff = df[df["Country"] == selected_country]
-
-        # ----------------------------
-        # Line Chart
-        # ----------------------------
-        st.subheader(f"📈 Average Temperature Over Time — {selected_country}")
-
-        fig = px.line(
-            dff,
-            x="dt",
-            y="AverageTemperature",
-            labels={"dt": "Year", "AverageTemperature": "Average Temperature (°C)"},
+        # Sidebar options
+        st.sidebar.header("📊 Select Visualization")
+        choice = st.sidebar.selectbox(
+            "Choose a graph:",
+            [
+                "Global Temperature Trend",
+                "Top 10 Hottest Countries",
+                "Top 10 Coldest Countries",
+                "Country-wise Temperature Trend",
+                "Histogram of Global Temperatures",
+            ],
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        # 1️⃣ Global Trend
+        if choice == "Global Temperature Trend":
+            st.subheader("🌍 Global Average Temperature Trend")
+            global_temp = df.groupby("Year")["AverageTemperature"].mean().reset_index()
+            fig = px.line(global_temp, x="Year", y="AverageTemperature",
+                          title="Global Temperature Trend (Yearly)", markers=True)
+            st.plotly_chart(fig, use_container_width=True)
 
-        # ----------------------------
-        # Show raw data
-        # ----------------------------
-        with st.expander("📄 Show Raw Data Table"):
-            st.dataframe(dff)
+        # 2️⃣ Hottest Countries
+        elif choice == "Top 10 Hottest Countries":
+            st.subheader("🔥 Top 10 Hottest Countries")
+            hot = df.groupby("Country")["AverageTemperature"].mean().nlargest(10).reset_index()
+            fig = px.bar(hot, x="AverageTemperature", y="Country",
+                         orientation="h", title="Top 10 Hottest Countries",
+                         color="AverageTemperature", color_continuous_scale="Reds")
+            st.plotly_chart(fig, use_container_width=True)
+
+        # 3️⃣ Coldest Countries
+        elif choice == "Top 10 Coldest Countries":
+            st.subheader("❄️ Top 10 Coldest Countries")
+            cold = df.groupby("Country")["AverageTemperature"].mean().nsmallest(10).reset_index()
+            fig = px.bar(cold, x="AverageTemperature", y="Country",
+                         orientation="h", title="Top 10 Coldest Countries",
+                         color="AverageTemperature", color_continuous_scale="Blues")
+            st.plotly_chart(fig, use_container_width=True)
+
+        # 4️⃣ Country Trend
+        elif choice == "Country-wise Temperature Trend":
+            st.subheader("🌎 Country-wise Temperature Trend")
+            country = st.sidebar.selectbox("Select Country:", sorted(df["Country"].unique()))
+            country_df = df[df["Country"] == country]
+            trend = country_df.groupby("Year")["AverageTemperature"].mean().reset_index()
+            fig = px.line(trend, x="Year", y="AverageTemperature",
+                          title=f"Temperature Trend of {country}", markers=True)
+            st.plotly_chart(fig, use_container_width=True)
+
+        # 5️⃣ Histogram
+        elif choice == "Histogram of Global Temperatures":
+            st.subheader("📊 Histogram of Global Temperatures")
+            fig = px.histogram(df, x="AverageTemperature",
+                               title="Global Temperature Distribution", nbins=40)
+            st.plotly_chart(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"❌ Visualization Error: {e}")
