@@ -13,7 +13,9 @@ st.title("🌡️ Global Temperature And Climate Change Analysis Dashboard")
 # ---------------------------------------------------
 # FILE UPLOAD (ZIP or CSV)
 # ---------------------------------------------------
-uploaded = st.file_uploader("📂 Upload Temperature ZIP/CSV file", type=["zip", "csv"])
+
+            df = pd.read_csv(uploaded)
+uploaded = st.file_uploader(""C:\Users\amrut\Downloads\GlobalLandTemperaturesByCity.csv (1).zip"", type=["zip", "csv"])
 
 if uploaded is not None:
     try:
@@ -31,8 +33,6 @@ if uploaded is not None:
         # If CSV uploaded
         # ---------------------------
         else:
-            df = pd.read_csv(uploaded)
-
         # ---------------------------
         # CLEANING
         # ---------------------------
