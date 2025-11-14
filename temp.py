@@ -117,4 +117,13 @@ elif menu == "Top 10 Coldest Countries":
 
 # 4) Country Trend
 elif menu == "Country-wise Temperature Trend":
-    cou
+    country = st.selectbox("🌍 Select Country", sorted(df[country_col].unique()))
+    trend = df[df[country_col] == country].groupby("Year")[temp_col].mean().reset_index()
+    fig = px.line(trend, x="Year", y=temp_col, title=f"Temperature Trend – {country}")
+    st.plotly_chart(fig, use_container_width=True)
+
+# 5) Histogram
+elif menu == "Histogram of Global Temperatures":
+    fig = px.histogram(df, x=temp_col, nbins=40,
+                       title="📊 Distribution of Global Temperatures")
+    st.plotly_chart(fig, use_container_width=True)
