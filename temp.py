@@ -14,7 +14,7 @@ st.title("🌡️ Global Temperature Dashboard (Google Drive ZIP Linked)")
 # -------------------------------------------------------
 # GOOGLE DRIVE DIRECT DOWNLOAD LINK
 # -------------------------------------------------------
-file_id = "1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"   # your ZIP file ID
+file_id = "1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"   # ZIP file ID
 download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
 
 # -------------------------------------------------------
@@ -66,14 +66,12 @@ if df is None:
     st.warning("⚠️ No data loaded. Please check your file.")
     st.stop()
 
-
 # -------------------------------------------------------
 # DATA PREVIEW
 # -------------------------------------------------------
 st.success("✅ File loaded successfully!")
 st.write("### 🔍 Preview of Data:")
 st.dataframe(df.head())
-
 
 # -------------------------------------------------------
 # AUTO-DETECT KEY COLUMNS
@@ -97,14 +95,12 @@ if not all([date_col, temp_col, country_col]):
 
 st.success(f"✅ Detected columns: **{date_col}**, **{temp_col}**, **{country_col}**")
 
-
 # -------------------------------------------------------
 # CLEANING
 # -------------------------------------------------------
 df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 df["Year"] = df[date_col].dt.year
 df = df.dropna(subset=[temp_col, country_col])
-
 
 # -------------------------------------------------------
 # SIDEBAR MENU
@@ -119,7 +115,6 @@ menu = st.sidebar.selectbox(
         "Histogram of Global Temperatures"
     ]
 )
-
 
 # -------------------------------------------------------
 # VISUALIZATIONS
