@@ -1,162 +1,152 @@
 import streamlit as st
 import pandas as pd
-import io
-import requests
 import plotly.express as px
+import requests
 import zipfile
+import io
 
 # -------------------------------------------------------
-# APP TITLE
+# PAGE SETTINGS
 # -------------------------------------------------------
-st.set_page_config(page_title="🌍 Global Temperature Dashboard", layout="wide")
-st.title("🌡️ Global Temperature Dashboard (Google Drive ZIP Linked)")
+st.set_page_config(
+    page_title="🌍 Global Temperature Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+st.title("🌡️ Recent Global Temperature Dashboard")
 
 # -------------------------------------------------------
-# GOOGLE DRIVE DIRECT DOWNLOAD LINK
+# LOAD DATA (Google Drive ZIP)
 # -------------------------------------------------------
-file_id = "1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"   # ZIP file ID
-download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+file_id = "1RT8dMSKj2123wY_BjELt_3LabFQL0GA4"
+url = f"https://drive.google.com/uc?export=download&id={file_id}"
 
-# -------------------------------------------------------
-# LOAD ZIP → EXTRACT CSV → LOAD DATAFRAME
-# -------------------------------------------------------
 @st.cache_data
-def load_data(url):
-    """Download ZIP from Google Drive and extract CSV inside it"""
+def load_temperature_data():
     try:
-        st.info("📥 Downloading ZIP from Google Drive...")
-        response = requests.get(url)
-        response.raise_for_status()
+        st.info("📥 Downloading temperature data...")
+        r = requests.get(url)
+        r.raise_for_status()
 
-        content = response.content
-
-        # ZIP file signature = PK
-        if content[:2] != b'PK':
-            st.error("❌ The file downloaded is NOT a ZIP file.")
+        if r.content[:2] != b"PK":
+            st.error("❌ File is not a ZIP. Please check Google Drive link.")
             return None
 
-        st.success("📦 ZIP file detected! Extracting CSV...")
-
-        with zipfile.ZipFile(io.BytesIO(content)) as z:
-
-            # find CSV inside ZIP
-            csv_files = [f for f in z.namelist() if f.lower().endswith(".csv")]
+        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+            csv_files = [f for f in z.namelist() if f.endswith(".csv")]
             if not csv_files:
-                st.error("❌ No CSV found inside ZIP.")
+                st.error("❌ ZIP contains no CSV file.")
                 return None
 
-            csv_name = csv_files[0]
-            st.info(f"📄 Found CSV inside ZIP: {csv_name}")
-
-            with z.open(csv_name) as f:
+            with z.open(csv_files[0]) as f:
                 df = pd.read_csv(f, low_memory=False)
                 return df
 
     except Exception as e:
-        st.error(f"❌ Error loading ZIP/CSV: {e}")
+        st.error(f"❌ Error loading data: {e}")
         return None
 
-
-# -------------------------------------------------------
-# LOAD DATA
-# -------------------------------------------------------
-df = load_data(download_url)
-
+df = load_temperature_data()
 if df is None:
-    st.warning("⚠️ No data loaded. Please check your file.")
     st.stop()
 
 # -------------------------------------------------------
-# DATA PREVIEW
+# AUTO-DETECT COLUMNS
 # -------------------------------------------------------
-st.success("✅ File loaded successfully!")
-st.write("### 🔍 Preview of Data:")
-st.dataframe(df.head())
-
-# -------------------------------------------------------
-# AUTO-DETECT KEY COLUMNS
-# -------------------------------------------------------
-date_col = None
-temp_col = None
-country_col = None
-
-for c in df.columns:
-    cl = c.lower()
-    if "date" in cl or "dt" in cl:
-        date_col = c
-    elif "temp" in cl:
-        temp_col = c
-    elif "country" in cl:
-        country_col = c
+date_col = next((c for c in df.columns if "date" in c.lower() or "dt" in c.lower()), None)
+temp_col = next((c for c in df.columns if "temp" in c.lower()), None)
+country_col = next((c for c in df.columns if "country" in c.lower()), None)
 
 if not all([date_col, temp_col, country_col]):
-    st.error("❌ Could not detect required columns (date, temp, country).")
+    st.error("❌ Missing required columns: date, temperature, or country.")
     st.stop()
 
-st.success(f"✅ Detected columns: **{date_col}**, **{temp_col}**, **{country_col}**")
-
-# -------------------------------------------------------
-# CLEANING
-# -------------------------------------------------------
-df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+# Cleaning
+df[date_col] = pd.to_datetime(df[date_col], errors="ignore")
 df["Year"] = df[date_col].dt.year
 df = df.dropna(subset=[temp_col, country_col])
 
+st.success("✅ Data loaded successfully!")
+
 # -------------------------------------------------------
-# SIDEBAR MENU
+# SIDEBAR FILTERS
 # -------------------------------------------------------
-menu = st.sidebar.selectbox(
-    "📊 Select Visualization",
-    [
-        "Global Temperature Trend",
-        "Top 10 Hottest Countries",
-        "Top 10 Coldest Countries",
-        "Country-wise Temperature Trend",
-        "Histogram of Global Temperatures"
-    ]
+st.sidebar.header("📌 Filters")
+
+year_range = st.sidebar.slider(
+    "Select Year Range",
+    int(df["Year"].min()),
+    int(df["Year"].max()),
+    (2000, df["Year"].max())
 )
+
+country_list = ["All Countries"] + sorted(df[country_col].unique())
+selected_country = st.sidebar.selectbox("Select Country", country_list)
+
+# Apply filters
+filtered = df[(df["Year"] >= year_range[0]) & (df["Year"] <= year_range[1])]
+
+if selected_country != "All Countries":
+    filtered = filtered[filtered[country_col] == selected_country]
+
+# -------------------------------------------------------
+# DASHBOARD CARDS
+# -------------------------------------------------------
+col1, col2, col3 = st.columns(3)
+
+avg_temp = round(filtered[temp_col].mean(), 2)
+hottest_year = int(filtered.groupby("Year")[temp_col].mean().idxmax())
+coldest_year = int(filtered.groupby("Year")[temp_col].mean().idxmin())
+
+col1.metric("🌡️ Avg Temperature", f"{avg_temp} °C")
+col2.metric("🔥 Hottest Year", hottest_year)
+col3.metric("❄️ Coldest Year", coldest_year)
 
 # -------------------------------------------------------
 # VISUALIZATIONS
 # -------------------------------------------------------
+st.subheader("📈 Temperature Trends")
 
-# 1) Global Trend
-if menu == "Global Temperature Trend":
-    global_temp = df.groupby("Year")[temp_col].mean().reset_index()
-    fig = px.line(global_temp, x="Year", y=temp_col,
-                  title="🌡️ Global Average Temperature Over Time",
-                  color_discrete_sequence=["red"])
-    st.plotly_chart(fig, use_container_width=True)
+trend = filtered.groupby("Year")[temp_col].mean().reset_index()
 
-# 2) Top 10 Hot Countries
-elif menu == "Top 10 Hottest Countries":
-    hot = df.groupby(country_col)[temp_col].mean().nlargest(10).reset_index()
-    fig = px.bar(hot, x=temp_col, y=country_col, orientation="h",
-                 title="🔥 Top 10 Hottest Countries",
-                 color=temp_col, color_continuous_scale="Reds")
-    st.plotly_chart(fig, use_container_width=True)
+fig1 = px.line(
+    trend,
+    x="Year",
+    y=temp_col,
+    title="🌍 Global Temperature Trend",
+    markers=True
+)
+st.plotly_chart(fig1, use_container_width=True)
 
-# 3) Top 10 Cold Countries
-elif menu == "Top 10 Coldest Countries":
-    cold = df.groupby(country_col)[temp_col].mean().nsmallest(10).reset_index()
-    fig = px.bar(cold, x=temp_col, y=country_col, orientation="h",
-                 title="❄️ Top 10 Coldest Countries",
-                 color=temp_col, color_continuous_scale="Blues")
-    st.plotly_chart(fig, use_container_width=True)
+# -------------------------------------------------------
+# COUNTRIES COMPARISON (ONLY WHEN ALL COUNTRIES SELECTED)
+# -------------------------------------------------------
+if selected_country == "All Countries":
+    st.subheader("🌡️ Top 10 Hottest Countries")
 
-# 4) Country Trend
-elif menu == "Country-wise Temperature Trend":
-    country = st.selectbox("🌍 Select a Country", sorted(df[country_col].unique()))
-    trend = df[df[country_col] == country].groupby("Year")[temp_col].mean().reset_index()
+    hot = filtered.groupby(country_col)[temp_col].mean().nlargest(10).reset_index()
+    fig2 = px.bar(
+        hot,
+        x=temp_col,
+        y=country_col,
+        orientation="h",
+        title="🔥 Top 10 Hottest Countries"
+    )
+    st.plotly_chart(fig2, use_container_width=True)
 
-    fig = px.line(trend, x="Year", y=temp_col,
-                  title=f"🌍 Temperature Trend of {country}",
-                  color_discrete_sequence=["green"])
-    st.plotly_chart(fig, use_container_width=True)
+# -------------------------------------------------------
+# HISTOGRAM
+# -------------------------------------------------------
+st.subheader("📊 Temperature Distribution")
 
-# 5) Histogram
-elif menu == "Histogram of Global Temperatures":
-    fig = px.histogram(df, x=temp_col, nbins=40,
-                       title="📊 Distribution of Global Average Temperatures",
-                       color_discrete_sequence=["royalblue"])
-    st.plotly_chart(fig, use_container_width=True)
+fig3 = px.histogram(
+    filtered,
+    x=temp_col,
+    nbins=40,
+    title="📌 Temperature Histogram"
+)
+st.plotly_chart(fig3, use_container_width=True)
+
+# End
+st.write("✔️ Dashboard Updated with Recent Temperature Analysis")
