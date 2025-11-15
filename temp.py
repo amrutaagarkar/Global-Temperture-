@@ -54,7 +54,7 @@ menu = st.sidebar.selectbox(
 colors = {
     "hot": "#FF0000",
     "cold": "#0077FF",
-    "line": "#2ECC71",
+    "line": "blue",
     "hist": "#8E44AD",
 }
 
