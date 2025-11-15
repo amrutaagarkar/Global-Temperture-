@@ -8,11 +8,9 @@ import io
 st.title("🌍 Global Temperature & Climate Change Dashboard")
 
 # --------------------------
-# Load ZIP from Google Drive
+# Load ZIP from Google Drive (Silent Mode)
 # --------------------------
 drive_url = "https://drive.google.com/uc?export=download&id=1rIv7ciWzHOmGjl6QPwIeDhChTwCuTS_n"
-
-st.info("📥 Downloading data from Google Drive...")
 
 try:
     response = requests.get(drive_url)
@@ -21,8 +19,6 @@ try:
     z = zipfile.ZipFile(io.BytesIO(response.content))
     csv_name = [f for f in z.namelist() if f.endswith(".csv")][0]
     df = pd.read_csv(z.open(csv_name), encoding="latin1")
-
-    st.success("✅ CSV loaded successfully!")
 
 except Exception as e:
     st.error(f"❌ Error loading CSV: {e}")
@@ -54,7 +50,7 @@ menu = st.sidebar.selectbox(
 colors = {
     "hot": "#FF0000",
     "cold": "#0077FF",
-    "line": "blue",
+    "line": "#2ECC71",
     "hist": "#8E44AD",
 }
 
