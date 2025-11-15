@@ -4,7 +4,7 @@ import plotly.express as px
 import zipfile
 import io
 
-st.title("🌍 Global Temperature Dashboard")
+st.title("🌍 Global Temperature And Climate Change Analysis Dashboard")
 
 # ----------------------------------
 # UPLOAD ZIP FROM USER
@@ -34,7 +34,7 @@ df = df.dropna(subset=['AverageTemperature', 'Country'])
 # ----------------------------------
 # SIDEBAR SELECTION
 # ----------------------------------
-st.sidebar.title("📊 Visualization Menu")
+st.sidebar.title("📊 Menu")
 choice = st.sidebar.selectbox(
     "Choose view:",
     [
