@@ -9,8 +9,8 @@ import zipfile
 st.title("🌍 Global Temperature Dashboard")
 
 zip_path = r"C:\Users\amrut\Downloads\GlobalLandTemperaturesByCity.csv (1).zip"
-
 with zipfile.ZipFile(zip_path, 'r') as z:
+
     csv_name = z.namelist()[0]
     df = pd.read_csv(z.open(csv_name))
 
