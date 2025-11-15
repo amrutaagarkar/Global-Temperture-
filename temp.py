@@ -2,21 +2,30 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import zipfile
+import requests
+import io
 
 st.title("🌍 Global Temperature & Climate Change Dashboard")
 
 # --------------------------
-# Upload ZIP
+# Load ZIP from Google Drive
 # --------------------------
-uploaded = st.file_uploader("📥 Upload ZIP file containing CSV", type="zip")
-if not uploaded:
-    st.stop()
+drive_url = "https://drive.google.com/uc?export=download&id=1rIv7ciWzHOmGjl6QPwIeDhChTwCuTS_n"
+
+st.info("📥 Downloading data from Google Drive...")
 
 try:
-    with zipfile.ZipFile(uploaded) as z:
-        df = pd.read_csv(z.open(z.namelist()[0]))
-except:
-    st.error("Invalid ZIP file")
+    response = requests.get(drive_url)
+    response.raise_for_status()
+
+    z = zipfile.ZipFile(io.BytesIO(response.content))
+    csv_name = [f for f in z.namelist() if f.endswith(".csv")][0]
+    df = pd.read_csv(z.open(csv_name), encoding="latin1")
+
+    st.success("✅ CSV loaded successfully!")
+
+except Exception as e:
+    st.error(f"❌ Error loading CSV: {e}")
     st.stop()
 
 # --------------------------
@@ -29,14 +38,15 @@ df = df.dropna(subset=["AverageTemperature", "Country"])
 # --------------------------
 # Sidebar Menu
 # --------------------------
-options = [
-    "Top 10 Hottest Countries",
-    "Top 10 Coldest Countries",
-    "Country-wise Temperature Trend",
-    "Histogram of Global Temperatures",
-]
-
-menu = st.sidebar.selectbox("📊 Select View", options)
+menu = st.sidebar.selectbox(
+    "📊 Select View",
+    [
+        "Top 10 Hottest Countries",
+        "Top 10 Coldest Countries",
+        "Country-wise Temperature Trend",
+        "Histogram of Global Temperatures",
+    ]
+)
 
 # --------------------------
 # Colors
@@ -54,23 +64,31 @@ colors = {
 if menu == "Top 10 Hottest Countries":
     data = df.groupby("Country")["AverageTemperature"].mean().nlargest(10).reset_index()
     st.subheader("🔥 Top 10 Hottest Countries")
-    st.plotly_chart(px.bar(data, x="AverageTemperature", y="Country",
-                           orientation="h", color_discrete_sequence=[colors["hot"]]))
+    st.plotly_chart(px.bar(
+        data, x="AverageTemperature", y="Country",
+        orientation="h", color_discrete_sequence=[colors["hot"]]
+    ))
 
 elif menu == "Top 10 Coldest Countries":
     data = df.groupby("Country")["AverageTemperature"].mean().nsmallest(10).reset_index()
     st.subheader("❄️ Top 10 Coldest Countries")
-    st.plotly_chart(px.bar(data, x="AverageTemperature", y="Country",
-                           orientation="h", color_discrete_sequence=[colors["cold"]]))
+    st.plotly_chart(px.bar(
+        data, x="AverageTemperature", y="Country",
+        orientation="h", color_discrete_sequence=[colors["cold"]]
+    ))
 
 elif menu == "Country-wise Temperature Trend":
     country = st.selectbox("Select Country", sorted(df["Country"].unique()))
     data = df[df["Country"] == country].groupby("Year")["AverageTemperature"].mean().reset_index()
     st.subheader(f"🌎 Temperature Trend — {country}")
-    st.plotly_chart(px.line(data, x="Year", y="AverageTemperature",
-                            color_discrete_sequence=[colors["line"]]))
+    st.plotly_chart(px.line(
+        data, x="Year", y="AverageTemperature",
+        color_discrete_sequence=[colors["line"]]
+    ))
 
 elif menu == "Histogram of Global Temperatures":
     st.subheader("📊 Temperature Distribution")
-    st.plotly_chart(px.histogram(df, x="AverageTemperature",
-                                 nbins=40, color_discrete_sequence=[colors["hist"]]))
+    st.plotly_chart(px.histogram(
+        df, x="AverageTemperature",
+        nbins=40, color_discrete_sequence=[colors["hist"]]
+    ))
