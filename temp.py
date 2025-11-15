@@ -3,71 +3,104 @@ import pandas as pd
 import plotly.express as px
 import zipfile
 
-st.set_page_config(page_title="Global Climate Dashboard", layout="wide")
 st.title("🌍 Global Temperature & Climate Change Dashboard")
 
-# -------- Upload ZIP --------
-uploaded = st.file_uploader("📥 Upload ZIP containing CSV", type="zip")
+# --------------------------
+# File Upload
+# --------------------------
+uploaded = st.file_uploader("📥 Upload ZIP file containing CSV", type="zip")
 if not uploaded:
+    st.warning("Please upload a ZIP file to continue.")
     st.stop()
 
 try:
-    z = zipfile.ZipFile(uploaded)
-    df = pd.read_csv(z.open(z.namelist()[0]))
+    with zipfile.ZipFile(uploaded) as z:
+        df = pd.read_csv(z.open(z.namelist()[0]))
 except Exception as e:
-    st.error(f"ZIP Read Error: {e}")
+    st.error(f"Error reading ZIP file: {e}")
     st.stop()
 
-# -------- Clean Data --------
-df['dt'] = pd.to_datetime(df['dt'], errors='coerce')
-df = df.dropna(subset=['AverageTemperature', 'Country'])
-df['Year'] = df['dt'].dt.year
+# --------------------------
+# Clean Data
+# --------------------------
+df["dt"] = pd.to_datetime(df["dt"], errors="coerce")
+df["Year"] = df["dt"].dt.year
+df = df.dropna(subset=["AverageTemperature", "Country"])
 
-# -------- Sidebar --------
-st.sidebar.header("📊 Menu")
-choice = st.sidebar.selectbox(
-    "Choose View:",
-    ["Global Trend", "Top 10 Hot Countries", "Top 10 Cold Countries",
-     "Country Trend", "Temperature Histogram"]
+# --------------------------
+# Sidebar Menu
+# --------------------------
+menu = st.sidebar.selectbox(
+    "📊 Select View:",
+    [
+        "Global Temperature Trend",
+        "Top 10 Hottest Countries",
+        "Top 10 Coldest Countries",
+        "Country-wise Temperature Trend",
+        "Histogram of Global Temperatures",
+    ],
 )
 
-smooth = st.sidebar.checkbox("Smooth Line (Rolling Mean)")
-animate = st.sidebar.checkbox("Enable Animation")
+# --------------------------
+# Color Styles
+# --------------------------
+line_color = "#FF5733"           # Orange-red
+bar_color_hot = "#FF0000"        # Red
+bar_color_cold = "#0077FF"       # Blue
+hist_color = "#8E44AD"           # Purple
 
-# -------- Reusable Plot Function --------
-def line_plot(data, title):
-    if smooth:
-        data['Smooth'] = data['AverageTemperature'].rolling(5, min_periods=1).mean()
-        y = 'Smooth'
-    else:
-        y = 'AverageTemperature'
+# --------------------------
+# Helper Functions
+# --------------------------
+def line_chart(data, title, color=line_color):
+    st.subheader(title)
+    st.plotly_chart(
+        px.line(data, x="Year", y="AverageTemperature", color_discrete_sequence=[color]),
+        use_container_width=True,
+    )
 
-    if animate:
-        return px.line(data, x='Year', y=y, title=title, animation_frame='Year')
-    else:
-        return px.line(data, x='Year', y=y, title=title)
+def bar_chart(data, title, color):
+    st.subheader(title)
+    st.plotly_chart(
+        px.bar(
+            data,
+            x="AverageTemperature",
+            y="Country",
+            orientation="h",
+            color_discrete_sequence=[color],
+        ),
+        use_container_width=True,
+    )
 
-# -------- VIEWS --------
-if choice == "Global Trend":
-    g = df.groupby("Year")['AverageTemperature'].mean().reset_index()
-    st.plotly_chart(line_plot(g, "🌡 Global Temperature Trend"))
+# --------------------------
+# Views
+# --------------------------
+if menu == "Global Temperature Trend":
+    global_temp = df.groupby("Year")["AverageTemperature"].mean().reset_index()
+    line_chart(global_temp, "🌡️ Global Temperature Trend", color=line_color)
 
-elif choice == "Top 10 Hot Countries":
-    hot = df.groupby("Country")['AverageTemperature'].mean().nlargest(10).reset_index()
-    st.plotly_chart(px.bar(hot, x='AverageTemperature', y='Country', orientation='h',
-                           title="🔥 Top 10 Hottest Countries"))
+elif menu == "Top 10 Hottest Countries":
+    hot = df.groupby("Country")["AverageTemperature"].mean().nlargest(10).reset_index()
+    bar_chart(hot, "🔥 Top 10 Hottest Countries", bar_color_hot)
 
-elif choice == "Top 10 Cold Countries":
-    cold = df.groupby("Country")['AverageTemperature'].mean().nsmallest(10).reset_index()
-    st.plotly_chart(px.bar(cold, x='AverageTemperature', y='Country', orientation='h',
-                           title="❄ Top 10 Coldest Countries"))
+elif menu == "Top 10 Coldest Countries":
+    cold = df.groupby("Country")["AverageTemperature"].mean().nsmallest(10).reset_index()
+    bar_chart(cold, "❄️ Top 10 Coldest Countries", bar_color_cold)
 
-elif choice == "Country Trend":
-    country = st.selectbox("Select Country:", sorted(df['Country'].unique()))
-    c = df[df['Country'] == country].groupby('Year')['AverageTemperature'].mean().reset_index()
-    st.plotly_chart(line_plot(c, f"🌎 Temperature Trend — {country}"))
+elif menu == "Country-wise Temperature Trend":
+    st.subheader("🌎 Country-wise Temperature Trend")
+    country = st.selectbox("Select Country:", sorted(df["Country"].unique()))
+    cdf = df[df["Country"] == country].groupby("Year")["AverageTemperature"].mean().reset_index()
+    line_chart(cdf, f"Temperature Trend — {country}", color="#28B463")   # green smooth color
 
-elif choice == "Temperature Histogram":
-    st.plotly_chart(px.histogram(df, x='AverageTemperature', nbins=40,
-                                 title="📊 Global Temperature Distribution"))
-
+elif menu == "Histogram of Global Temperatures":
+    st.subheader("📊 Temperature Distribution")
+    st.plotly_chart(
+        px.histogram(
+            df,
+            x="AverageTemperature",
+            nbins=40,
+            color_discrete_sequence=[hist_color],
+        ),
+        use_container_width=True,
+    )
