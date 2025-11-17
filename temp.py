@@ -43,6 +43,10 @@ menu = st.sidebar.selectbox(
         "Histogram of Global Temperatures",
     ]
 )
+# Stop execution until user selects an option
+if menu == "-- Select View --":
+    st.info("👈 Please select a chart from the sidebar.")
+    st.stop()
 
 # --------------------------
 # Colors
