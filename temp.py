@@ -91,18 +91,12 @@ df = df.dropna(subset=["AverageTemperature", "Country"])
 menu = st.sidebar.selectbox(
     "📊 Select View",
     [
-        "-- Select View --",
         "Top 10 Hottest Countries",
         "Top 10 Coldest Countries",
         "Country-wise Temperature Trend",
         "Histogram of Global Temperatures",
     ]
 )
-
-# Stop execution until user selects an option
-if menu == "-- Select View --":
-    st.info("👈 Please select a chart from the sidebar.")
-    st.stop()
 
 # --------------------------
 # Colors
