@@ -5,6 +5,9 @@ import zipfile
 import requests
 import io
 
+st.set_page_config(layout="wide")
+
+
 st.title("🌍 Global Temperature & Climate Change Dashboard")
 
 # --------------------------
